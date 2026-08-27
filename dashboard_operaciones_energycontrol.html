@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EnergyControl · Control Gerencial de Operaciones</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#f4f7fb;--panel:#fff;--text:#182230;--muted:#6b7280;--line:#dfe5ec;--accent:#0f766e;--accent2:#0ea5e9;--good:#16803a;--warn:#b7791f;--bad:#c53030;--shadow:0 8px 25px rgba(15,23,42,.07)}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .topbar{background:#102a43;color:white;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;position:sticky;top:0;z-index:5}
+    .brand{font-weight:800;font-size:20px}.subtitle{opacity:.78;font-size:12px;margin-top:3px}.userbar{display:flex;align-items:center;gap:10px;font-size:13px}
+    button,select,input{font:inherit}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 13px;border-radius:10px;cursor:pointer}.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn.danger{background:#fff;color:var(--bad)}
+    .wrap{max-width:1550px;margin:0 auto;padding:20px}.hidden{display:none!important}
+    .login{max-width:420px;margin:80px auto;background:var(--panel);padding:28px;border-radius:18px;box-shadow:var(--shadow)}.login h1{font-size:22px;margin:0 0 8px}.login p{color:var(--muted);font-size:14px}.field{margin-top:14px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.field input,.field select,.filters select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--text)}
+    .error{color:var(--bad);font-size:13px;margin-top:10px}.filters{display:grid;grid-template-columns:1.2fr 1.6fr 1fr auto;gap:10px;background:var(--panel);padding:14px;border-radius:16px;box-shadow:var(--shadow);align-items:end}.filters label{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;margin-bottom:5px}
+    .kpis{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;margin:14px 0}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}.kpi .label{font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase}.kpi .value{font-size:21px;font-weight:800;margin-top:7px}.kpi .small{font-size:11px;color:var(--muted);margin-top:4px}
+    .grid2{display:grid;grid-template-columns:1.55fr .8fr;gap:14px}.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}.section-title h2{font-size:16px;margin:0}.section-title span{font-size:12px;color:var(--muted)}
+    .table-wrap{overflow:auto;max-width:100%}table{border-collapse:collapse;width:100%;min-width:900px;font-size:12px}th{position:sticky;top:0;background:#f8fafc;color:#52606d;text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.03em}td{padding:10px 8px;border-bottom:1px solid #edf1f5;vertical-align:top}td.num,th.num{text-align:right}.link{background:none;border:0;color:#0f5b78;font-weight:800;cursor:pointer;padding:0;text-align:left}.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}.green{background:#e9f7ef;color:var(--good)}.yellow{background:#fff7df;color:var(--warn)}.red{background:#fdecec;color:var(--bad)}.gray{background:#eef2f6;color:#52606d}
+    .alert{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;font-size:12px}.alert strong{font-size:15px}.admin-list{display:grid;gap:8px}.admin-btn{width:100%;text-align:left;padding:11px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}.admin-btn:hover{background:#f8fafc}.admin-btn .name{font-weight:800}.admin-btn .meta{font-size:11px;color:var(--muted);margin-top:4px}
+    .detail{margin-top:14px}.detail-head{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}.detail-title{font-size:20px;font-weight:900}.detail-meta{font-size:12px;color:var(--muted);margin-top:4px}.detail-kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:12px}.mini{background:#f8fafc;border-radius:10px;padding:10px;border:1px solid var(--line)}.mini .l{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800}.mini .v{font-size:15px;font-weight:800;margin-top:5px}
+    .bars{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.barbox{padding:12px;border:1px solid var(--line);border-radius:10px}.barlabel{display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px}.bar{height:10px;background:#e5eaf0;border-radius:99px;overflow:hidden}.fill{height:100%;background:var(--accent)}.fill.blue{background:var(--accent2)}
+    .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.chart-box{height:290px}.subtabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px}.tab{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer}.tab.active{background:#102a43;color:#fff;border-color:#102a43}
+    .note{font-size:11px;color:var(--muted);margin-top:8px}.loading{padding:28px;text-align:center;color:var(--muted)}
+    @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2,.charts{grid-template-columns:1fr}.detail-kpis{grid-template-columns:repeat(3,1fr)}.filters{grid-template-columns:1fr 1fr}.topbar{position:static}}
+    @media(max-width:650px){.wrap{padding:10px}.kpis,.detail-kpis{grid-template-columns:1fr 1fr}.filters{grid-template-columns:1fr}.bars{grid-template-columns:1fr}.userbar span{display:none}.topbar{padding:14px}.brand{font-size:16px}}
+  </style>
+</head>
+<body>
+  <div id="loginView" class="login">
+    <h1>Control Gerencial de Operaciones</h1>
+    <p>Ingresa con tu usuario autorizado de Supabase.</p>
+    <form id="loginForm">
+      <div class="field"><label>Correo</label><input id="email" type="email" required autocomplete="username" /></div>
+      <div class="field"><label>Contraseña</label><input id="password" type="password" required autocomplete="current-password" /></div>
+      <button class="btn primary" style="width:100%;margin-top:18px" type="submit">Ingresar</button>
+      <div id="loginError" class="error"></div>
+    </form>
+  </div>
+
+  <div id="appView" class="hidden">
+    <div class="topbar">
+      <div><div class="brand">ENERGYCONTROL · Operaciones</div><div class="subtitle">Presupuesto · avance físico · OC comprometidas · real ejecutado · cobros</div></div>
+      <div class="userbar"><span id="userEmail"></span><button id="refreshBtn" class="btn">Actualizar</button><button id="logoutBtn" class="btn danger">Salir</button></div>
+    </div>
+    <main class="wrap">
+      <section class="filters">
+        <div><label>Administrador</label><select id="adminFilter"><option value="">Todos</option></select></div>
+        <div><label>Proyecto / PO</label><select id="projectFilter"><option value="">Todos</option></select></div>
+        <div><label>Semáforo financiero</label><select id="statusFilter"><option value="">Todos</option><option value="ROJO">Rojo</option><option value="AMARILLO">Amarillo</option><option value="VERDE">Verde</option></select></div>
+        <button id="clearBtn" class="btn">Limpiar</button>
+      </section>
+
+      <section id="kpis" class="kpis"></section>
+
+      <section class="grid2">
+        <div class="card">
+          <div class="section-title"><div><h2>Portafolio de proyectos</h2><span>Selecciona una PO para ver el detalle operativo y financiero</span></div><strong id="projectCount"></strong></div>
+          <div class="table-wrap"><table><thead><tr><th>PO / Proyecto</th><th>Administrador</th><th class="num">Contrato</th><th class="num">Presupuesto</th><th class="num">Comprometido</th><th class="num">Real</th><th class="num">Av. físico</th><th class="num">Av. financiero</th><th class="num">Cobrado</th><th>Estado</th></tr></thead><tbody id="projectRows"></tbody></table></div>
+        </div>
+        <div>
+          <div class="card"><div class="section-title"><div><h2>Alertas gerenciales</h2><span>Control automático</span></div></div><div id="alerts"></div></div>
+          <div class="card" style="margin-top:14px"><div class="section-title"><div><h2>Carga por administrador</h2><span>Haz clic para filtrar</span></div></div><div id="adminSummary" class="admin-list"></div></div>
+        </div>
+      </section>
+
+      <section id="detailCard" class="card detail hidden">
+        <div id="detailHead"></div>
+        <div id="detailKpis" class="detail-kpis"></div>
+        <div id="detailBars" class="bars"></div>
+        <div class="charts"><div class="card"><div class="section-title"><h2>Presupuesto vs comprometido vs real</h2></div><div class="chart-box"><canvas id="rubrosChart"></canvas></div></div><div class="card"><div class="section-title"><h2>Distribución del real ejecutado</h2></div><div class="chart-box"><canvas id="realChart"></canvas></div></div></div>
+        <div class="subtabs"><button class="tab active" data-tab="rubros">Rubros</button><button class="tab" data-tab="gastos">Detalle del gasto real</button></div>
+        <div id="rubrosPanel"><div class="table-wrap"><table><thead><tr><th>Rubro</th><th class="num">Presupuesto</th><th class="num">Comprometido</th><th class="num">Real</th><th class="num">Disponible</th><th class="num">% real/ppto.</th><th>Control</th></tr></thead><tbody id="rubrosRows"></tbody></table></div></div>
+        <div id="gastosPanel" class="hidden"><div class="filters" style="box-shadow:none;padding:0;margin-bottom:10px;grid-template-columns:1fr auto"><div><label>Filtrar rubro</label><select id="rubroFilter"><option value="">Todos los rubros</option></select></div><button id="exportBtn" class="btn">Exportar CSV</button></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Rubro</th><th>Proveedor / origen</th><th>Factura / documento</th><th>Descripción</th><th>Cuenta contable</th><th class="num">Valor</th></tr></thead><tbody id="gastoRows"></tbody></table></div><div class="note">El detalle real combina facturas, servicios y movimientos de inventario según la información cargada desde Odoo.</div></div>
+      </section>
+      <div id="loading" class="loading hidden">Cargando información…</div>
+    </main>
+  </div>
+
+<script>
+const SUPABASE_URL='https://wiqnfnlnsdnkxgshchjg.supabase.co';
+const SUPABASE_KEY='sb_publishable_Rk88NYc5jpdJiTQgUKViZA_0VvpbRpE';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let projects=[], selectedProject=null, rubros=[], gastos=[], rubrosChart=null, realChart=null;
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat('es-EC',{style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0}).format(Number(n||0));
+const pct=n=>n===null||n===undefined?'—':Number(n).toFixed(1)+'%';
+const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const num=n=>Number(n||0);
+function badge(status){const cls=status==='ROJO'?'red':status==='AMARILLO'?'yellow':'green'; const text=status==='ROJO'?'Crítico':status==='AMARILLO'?'Atención':'Normal'; return `<span class="badge ${cls}">${text}</span>`}
+function physicalBadge(p){const gap=(num(p.pct_ejecucion_financiera)-num(p.avance_fisico));if(p.avance_fisico==null)return '<span class="badge gray">Sin avance físico</span>';if(gap>20)return '<span class="badge red">Costo muy adelantado</span>';if(gap>10)return '<span class="badge yellow">Costo adelantado</span>';return '<span class="badge green">Alineado</span>'}
+function showLoading(v){$('loading').classList.toggle('hidden',!v)}
+async function boot(){const {data:{session}}=await sb.auth.getSession();if(session)showApp(session.user);else showLogin();}
+function showLogin(){$('loginView').classList.remove('hidden');$('appView').classList.add('hidden')}
+async function showApp(user){$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('userEmail').textContent=user.email||'';await loadProjects()}
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';const {data,error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});if(error){$('loginError').textContent='No se pudo iniciar sesión: '+error.message;return}showApp(data.user)});
+$('logoutBtn').addEventListener('click',async()=>{await sb.auth.signOut();showLogin()});
+$('refreshBtn').addEventListener('click',loadProjects);
+async function loadProjects(){showLoading(true);const {data,error}=await sb.from('vw_dashboard_operaciones').select('*').order('proyecto');showLoading(false);if(error){alert('Error cargando proyectos: '+error.message);return}projects=data||[];populateFilters();renderAll()}
+function populateFilters(){const af=$('adminFilter'),pf=$('projectFilter');const aVal=af.value,pVal=pf.value;af.innerHTML='<option value="">Todos</option>'+[...new Set(projects.map(x=>x.administrador).filter(Boolean))].sort().map(x=>`<option>${esc(x)}</option>`).join('');pf.innerHTML='<option value="">Todos</option>'+projects.map(x=>`<option value="${esc(x.proyecto)}">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||'')}</option>`).join('');af.value=aVal;pf.value=pVal}
+function filteredProjects(){return projects.filter(x=>(!$('adminFilter').value||x.administrador===$('adminFilter').value)&&(!$('projectFilter').value||x.proyecto===$('projectFilter').value)&&(!$('statusFilter').value||x.semaforo_financiero===$('statusFilter').value))}
+function renderAll(){renderKPIs();renderProjectTable();renderAlerts();renderAdmins()}
+function renderKPIs(){const d=filteredProjects(),sum=k=>d.reduce((a,x)=>a+num(x[k]),0);const physical=d.filter(x=>x.avance_fisico!=null);const avgPhys=physical.length?physical.reduce((a,x)=>a+num(x.avance_fisico),0)/physical.length:0;const cards=[['Proyectos',d.length,'en vista'],['Contratos',money(sum('monto_contrato')),'valor contractual'],['Presupuesto',money(sum('presupuesto_aterrizado')),'aterrizado'],['OC comprometidas',money(sum('comprometido')),'pendiente/comprometido'],['Real ejecutado',money(sum('real_ejecutado')),'costo real'],['Cobrado',money(sum('monto_cobrado')),'ingresos realizados'],['Avance físico prom.',pct(avgPhys),'promedio simple']];$('kpis').innerHTML=cards.map(c=>`<div class="card kpi"><div class="label">${c[0]}</div><div class="value">${c[1]}</div><div class="small">${c[2]}</div></div>`).join('')}
+function renderProjectTable(){const d=filteredProjects();$('projectCount').textContent=d.length+' proyectos';$('projectRows').innerHTML=d.map(x=>`<tr><td><button class="link" data-po="${esc(x.proyecto)}">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||'')}</button></td><td>${esc(x.administrador||'Sin asignar')}</td><td class="num">${money(x.monto_contrato)}</td><td class="num">${money(x.presupuesto_aterrizado)}</td><td class="num">${money(x.comprometido)}</td><td class="num"><strong>${money(x.real_ejecutado)}</strong></td><td class="num">${pct(x.avance_fisico)}</td><td class="num">${pct(x.pct_ejecucion_financiera)}</td><td class="num">${pct(x.pct_cobrado)}</td><td>${badge(x.semaforo_financiero)}<div style="margin-top:4px">${physicalBadge(x)}</div></td></tr>`).join('');document.querySelectorAll('[data-po]').forEach(b=>b.addEventListener('click',()=>selectProject(b.dataset.po)))}
+function renderAlerts(){const d=filteredProjects();const red=d.filter(x=>x.semaforo_financiero==='ROJO').length,yellow=d.filter(x=>x.semaforo_financiero==='AMARILLO').length,overCobro=d.filter(x=>num(x.pct_cobrado)>100).length,noPpto=d.filter(x=>num(x.presupuesto_aterrizado)===0).length,gap=d.filter(x=>x.avance_fisico!=null&&num(x.pct_ejecucion_financiera)-num(x.avance_fisico)>10).length;$('alerts').innerHTML=`<div class="alert"><strong>🔴 ${red}</strong> proyectos sobre presupuesto</div><div class="alert"><strong>🟡 ${yellow}</strong> proyectos cerca del límite</div><div class="alert"><strong>⚙️ ${gap}</strong> con avance financiero > físico por más de 10 puntos</div><div class="alert"><strong>💰 ${overCobro}</strong> con cobro mayor al contrato</div><div class="alert"><strong>📌 ${noPpto}</strong> sin presupuesto aterrizado</div>`}
+function renderAdmins(){const map={};filteredProjects().forEach(x=>{const a=x.administrador||'Sin asignar';map[a]??={count:0,real:0,contract:0,red:0,phys:0,physN:0};map[a].count++;map[a].real+=num(x.real_ejecutado);map[a].contract+=num(x.monto_contrato);if(x.semaforo_financiero==='ROJO')map[a].red++;if(x.avance_fisico!=null){map[a].phys+=num(x.avance_fisico);map[a].physN++}});$('adminSummary').innerHTML=Object.entries(map).sort((a,b)=>b[1].contract-a[1].contract).map(([name,v])=>`<button class="admin-btn" data-admin="${esc(name)}"><div class="name">${esc(name)}</div><div class="meta">${v.count} proyectos · Real ${money(v.real)} · Avance físico prom. ${pct(v.physN?v.phys/v.physN:0)} ${v.red?'· 🔴 '+v.red+' críticos':''}</div></button>`).join('');document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{$('adminFilter').value=b.dataset.admin;$('projectFilter').value='';renderAll()}))}
+['adminFilter','projectFilter','statusFilter'].forEach(id=>$(id).addEventListener('change',renderAll));$('clearBtn').addEventListener('click',()=>{$('adminFilter').value='';$('projectFilter').value='';$('statusFilter').value='';renderAll();$('detailCard').classList.add('hidden')});
+async function selectProject(po){selectedProject=projects.find(x=>x.proyecto===po);if(!selectedProject)return;$('projectFilter').value=po;renderAll();$('detailCard').classList.remove('hidden');renderDetailHeader();showLoading(true);await Promise.all([loadRubros(po),loadGastos(po)]);showLoading(false);renderRubros();renderGastos();renderCharts();$('detailCard').scrollIntoView({behavior:'smooth',block:'start'})}
+function renderDetailHeader(){const x=selectedProject;const gap=x.avance_fisico==null?null:num(x.pct_ejecucion_financiera)-num(x.avance_fisico);$('detailHead').innerHTML=`<div class="detail-head"><div><div class="detail-title">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||'')}</div><div class="detail-meta">Administrador: <strong>${esc(x.administrador||'Sin asignar')}</strong> · Estado operativo: ${esc(x.estado_operativo||'')}</div></div><div>${badge(x.semaforo_financiero)} ${physicalBadge(x)}</div></div>`;$('detailKpis').innerHTML=[['Contrato',money(x.monto_contrato)],['Presupuesto',money(x.presupuesto_aterrizado)],['Comprometido',money(x.comprometido)],['Real ejecutado',money(x.real_ejecutado)],['Cobrado',money(x.monto_cobrado)],['Pendiente cobro',money(num(x.monto_contrato)-num(x.monto_cobrado))],['Brecha físico/fin.',gap==null?'—':(gap>0?'+':'')+gap.toFixed(1)+' pts']].map(c=>`<div class="mini"><div class="l">${c[0]}</div><div class="v">${c[1]}</div></div>`).join('');$('detailBars').innerHTML=`<div class="barbox"><div class="barlabel"><span>Avance físico</span><strong>${pct(x.avance_fisico)}</strong></div><div class="bar"><div class="fill blue" style="width:${Math.min(100,num(x.avance_fisico))}%"></div></div></div><div class="barbox"><div class="barlabel"><span>Avance financiero</span><strong>${pct(x.pct_ejecucion_financiera)}</strong></div><div class="bar"><div class="fill" style="width:${Math.min(100,num(x.pct_ejecucion_financiera))}%"></div></div></div>`}
+async function loadRubros(po){const [{data:p},{data:c},{data:r}]=await Promise.all([sb.from('presupuesto_proyecto_categoria').select('rubro,rubro_clave,presupuesto_aterrizado').eq('proyecto',po),sb.from('oc_categoria_compromisos_auto').select('rubro,rubro_clave,monto_comprometido').eq('proyecto',po),sb.from('presupuesto_real_categoria').select('rubro,rubro_clave,monto_real').eq('proyecto',po)]);const map={};(p||[]).forEach(x=>{map[x.rubro_clave]={key:x.rubro_clave,rubro:x.rubro,ppto:num(x.presupuesto_aterrizado),comp:0,real:0}});(c||[]).forEach(x=>{map[x.rubro_clave]??={key:x.rubro_clave,rubro:x.rubro,ppto:0,comp:0,real:0};map[x.rubro_clave].comp+=num(x.monto_comprometido)});(r||[]).forEach(x=>{map[x.rubro_clave]??={key:x.rubro_clave,rubro:x.rubro,ppto:0,comp:0,real:0};map[x.rubro_clave].real+=num(x.monto_real)});rubros=Object.values(map).sort((a,b)=>b.real-a.real)}
+async function loadGastos(po){const {data,error}=await sb.from('presupuesto_real_categoria_detalle').select('fecha,rubro,rubro_clave,proveedor,factura,descripcion,cuenta_contable,monto').eq('proyecto',po).order('fecha',{ascending:false}).limit(5000);if(error){gastos=[];console.warn(error);return}gastos=data||[]}
+function controlRubro(x){if(x.ppto===0&&x.real>0)return '<span class="badge red">Sin presupuesto</span>';const ratio=x.ppto?x.real/x.ppto:0;if(ratio>1)return '<span class="badge red">Excedido</span>';if(ratio>=.8)return '<span class="badge yellow">Atención</span>';return '<span class="badge green">Normal</span>'}
+function renderRubros(){$('rubrosRows').innerHTML=rubros.map(x=>`<tr><td>${esc(x.rubro||x.key)}</td><td class="num">${money(x.ppto)}</td><td class="num">${money(x.comp)}</td><td class="num"><strong>${money(x.real)}</strong></td><td class="num">${money(x.ppto-x.real)}</td><td class="num">${x.ppto?pct(x.real/x.ppto*100):'—'}</td><td>${controlRubro(x)}</td></tr>`).join('')||'<tr><td colspan="7">Sin información por rubro.</td></tr>';const opts=[...new Set(gastos.map(x=>x.rubro).filter(Boolean))].sort();$('rubroFilter').innerHTML='<option value="">Todos los rubros</option>'+opts.map(x=>`<option>${esc(x)}</option>`).join('')}
+function renderGastos(){const f=$('rubroFilter').value;const d=gastos.filter(x=>!f||x.rubro===f);$('gastoRows').innerHTML=d.map(x=>`<tr><td>${esc(x.fecha||'')}</td><td>${esc(x.rubro||'Sin clasificar')}</td><td>${esc(x.proveedor||'')}</td><td>${esc(x.factura||'')}</td><td>${esc(x.descripcion||'')}</td><td>${esc(x.cuenta_contable||'')}</td><td class="num"><strong>${money(x.monto)}</strong></td></tr>`).join('')||'<tr><td colspan="7">Sin detalle real disponible.</td></tr>'}
+$('rubroFilter').addEventListener('change',renderGastos);
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('rubrosPanel').classList.toggle('hidden',b.dataset.tab!=='rubros');$('gastosPanel').classList.toggle('hidden',b.dataset.tab!=='gastos')}));
+function renderCharts(){if(rubrosChart)rubrosChart.destroy();if(realChart)realChart.destroy();const top=rubros.slice(0,10);rubrosChart=new Chart($('rubrosChart'),{type:'bar',data:{labels:top.map(x=>x.rubro),datasets:[{label:'Presupuesto',data:top.map(x=>x.ppto)},{label:'Comprometido',data:top.map(x=>x.comp)},{label:'Real',data:top.map(x=>x.real)}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{maxRotation:60,minRotation:30}},y:{beginAtZero:true}}}});const rr=rubros.filter(x=>x.real>0).slice(0,10);realChart=new Chart($('realChart'),{type:'doughnut',data:{labels:rr.map(x=>x.rubro),datasets:[{data:rr.map(x=>x.real)}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10}}}}})}
+$('exportBtn').addEventListener('click',()=>{const f=$('rubroFilter').value,d=gastos.filter(x=>!f||x.rubro===f);const rows=[['Fecha','Rubro','Proveedor','Documento','Descripcion','Cuenta','Valor'],...d.map(x=>[x.fecha,x.rubro,x.proveedor,x.factura,x.descripcion,x.cuenta_contable,x.monto])];const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='detalle_real_PO_'+(selectedProject?.proyecto||'')+'.csv';a.click();URL.revokeObjectURL(url)});
+boot();
+</script>
+</body>
+</html>
