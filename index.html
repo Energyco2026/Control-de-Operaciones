@@ -6,6 +6,7 @@
   <title>EnergyControl · Control Gerencial de Operaciones</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <style>
     :root{--bg:#f4f7fb;--panel:#fff;--text:#182230;--muted:#6b7280;--line:#dfe5ec;--accent:#0f766e;--accent2:#0ea5e9;--good:#16803a;--warn:#b7791f;--bad:#c53030;--shadow:0 8px 25px rgba(15,23,42,.07)}
     *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -44,7 +45,7 @@
   </div>
 
   <div id="appView" class="hidden">
-    <div class="topbar" style="justify-content:flex-end;background:white;border-bottom:1px solid #e5e7eb;min-height:auto;padding:10px 24px;"><div class="userbar"><span id="userEmail"></span><button id="refreshBtn" class="btn">Actualizar</button><button id="logoutBtn" class="btn danger">Salir</button></div></div>
+    <div class="topbar" style="justify-content:flex-end;background:white;border-bottom:1px solid #e5e7eb;min-height:auto;padding:10px 24px;"><div class="userbar"><span id="userEmail"></span><button id="excelBtn" class="btn">Descargar Excel</button><button id="refreshBtn" class="btn">Actualizar</button><button id="logoutBtn" class="btn danger">Salir</button></div></div>
     <main class="wrap">
       <section class="filters">
         <div><label>Administrador</label><select id="adminFilter"><option value="">Todos</option></select></div>
@@ -118,6 +119,125 @@ $('rubroFilter').addEventListener('change',renderGastos);
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('rubrosPanel').classList.toggle('hidden',b.dataset.tab!=='rubros');$('gastosPanel').classList.toggle('hidden',b.dataset.tab!=='gastos')}));
 function renderCharts(){if(rubrosChart)rubrosChart.destroy();if(realChart)realChart.destroy();const top=rubros.slice(0,10);rubrosChart=new Chart($('rubrosChart'),{type:'bar',data:{labels:top.map(x=>x.rubro),datasets:[{label:'Presupuesto',data:top.map(x=>x.ppto)},{label:'Comprometido',data:top.map(x=>x.comp)},{label:'Real',data:top.map(x=>x.real)}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{ticks:{maxRotation:60,minRotation:30}},y:{beginAtZero:true}}}});const rr=rubros.filter(x=>x.real>0).slice(0,10);realChart=new Chart($('realChart'),{type:'doughnut',data:{labels:rr.map(x=>x.rubro),datasets:[{data:rr.map(x=>x.real)}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10}}}}})}
 $('exportBtn').addEventListener('click',()=>{const f=$('rubroFilter').value,d=gastos.filter(x=>!f||x.rubro===f);const rows=[['Fecha','Rubro','Proveedor','Documento','Descripcion','Cuenta','Valor'],...d.map(x=>[x.fecha,x.rubro,x.proveedor,x.factura,x.descripcion,x.cuenta_contable,x.monto])];const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='detalle_real_PO_'+(selectedProject?.proyecto||'')+'.csv';a.click();URL.revokeObjectURL(url)});
+async function leerTodo(tabla,cols,proyectos,orden){
+  const out=[],size=1000;let from=0;
+  while(true){
+    const {data,error}=await sb.from(tabla).select(cols).in('proyecto',proyectos).order(orden).range(from,from+size-1);
+    if(error)throw new Error(tabla+': '+error.message);
+    out.push(...(data||[]));
+    if(!data||data.length<size)break;
+    from+=size;
+  }
+  return out;
+}
+function hojaEncabezado(ws,cols){
+  ws.columns=cols;
+  const r=ws.getRow(1);
+  r.font={bold:true,color:{argb:'FFFFFFFF'}};
+  r.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF213D6A'}};
+  r.alignment={vertical:'middle',wrapText:true};r.height=32;
+  ws.views=[{state:'frozen',ySplit:1}];
+  ws.autoFilter={from:{row:1,column:1},to:{row:1,column:cols.length}};
+}
+async function exportarExcel(){
+  const lista=filteredProjects();
+  if(!lista.length){alert('No hay proyectos en la vista actual.');return}
+  const pos=lista.map(x=>String(x.proyecto));
+  showLoading(true);
+  try{
+    const [ppto,comp,real,det]=await Promise.all([
+      leerTodo('presupuesto_proyecto_categoria','proyecto,rubro,rubro_clave,presupuesto_inicial,presupuesto_aterrizado',pos,'rubro_clave'),
+      leerTodo('oc_categoria_compromisos_auto','proyecto,rubro,rubro_clave,monto_comprometido',pos,'rubro_clave'),
+      leerTodo('presupuesto_real_categoria','proyecto,rubro,rubro_clave,monto_real',pos,'rubro_clave'),
+      leerTodo('presupuesto_real_categoria_detalle','id,proyecto,fecha,rubro,rubro_clave,proveedor,factura,descripcion,cuenta_contable,monto',pos,'id')
+    ]);
+    const map={};
+    const reg=x=>{const key=x.proyecto+'|'+x.rubro_clave;return map[key]??={proyecto:String(x.proyecto),clave:x.rubro_clave,rubro:x.rubro,ini:0,ppto:0,comp:0,realTabla:0}};
+    ppto.forEach(x=>{const r=reg(x);r.ini+=num(x.presupuesto_inicial);r.ppto+=num(x.presupuesto_aterrizado)});
+    comp.forEach(x=>{reg(x).comp+=num(x.monto_comprometido)});
+    real.forEach(x=>{reg(x).realTabla+=num(x.monto_real)});
+    det.forEach(x=>reg(x));
+    const rubrosXls=Object.values(map).sort((a,b)=>a.proyecto.localeCompare(b.proyecto)||String(a.rubro||'').localeCompare(String(b.rubro||'')));
+
+    const wb=new ExcelJS.Workbook();wb.creator='EnergyControl';wb.calcProperties.fullCalcOnLoad=true;
+    const M='"$"#,##0.00',P='0.0%';
+
+    // ---------- Hoja Proyectos ----------
+    const wp=wb.addWorksheet('Proyectos');
+    hojaEncabezado(wp,[
+      {header:'PO',key:'po',width:10},{header:'Proyecto',key:'nom',width:38},{header:'Administrador',key:'adm',width:20},{header:'Estado operativo',key:'est',width:16},
+      {header:'Contrato',key:'con',width:15,style:{numFmt:M}},{header:'Cobrado',key:'cob',width:15,style:{numFmt:M}},
+      {header:'Presupuesto aterrizado',key:'ppto',width:16,style:{numFmt:M}},{header:'Comprometido',key:'comp',width:15,style:{numFmt:M}},
+      {header:'Real ejecutado',key:'real',width:15,style:{numFmt:M}},{header:'Disponible',key:'disp',width:15,style:{numFmt:M}},
+      {header:'Avance físico',key:'fis',width:11,style:{numFmt:P}},{header:'Avance financiero',key:'fin',width:11,style:{numFmt:P}},
+      {header:'% Cobrado',key:'pcob',width:11,style:{numFmt:P}},{header:'Pendiente cobro',key:'pend',width:15,style:{numFmt:M}},
+      {header:'Brecha fin. - físico',key:'brecha',width:12,style:{numFmt:P}},{header:'Semáforo',key:'sem',width:12}
+    ]);
+    lista.forEach((x,i)=>{const r=i+2;
+      wp.addRow({po:String(x.proyecto),nom:x.proyecto_nombre||'',adm:x.administrador||'Sin asignar',est:x.estado_operativo||'',
+        con:num(x.monto_contrato),cob:num(x.monto_cobrado),
+        ppto:{formula:`SUMIFS(Rubros!$E:$E,Rubros!$A:$A,$A${r})`},
+        comp:{formula:`SUMIFS(Rubros!$F:$F,Rubros!$A:$A,$A${r})`},
+        real:{formula:`SUMIFS(Rubros!$G:$G,Rubros!$A:$A,$A${r})`},
+        disp:{formula:`G${r}-I${r}`},
+        fis:x.avance_fisico==null?null:num(x.avance_fisico)/100,
+        fin:{formula:`IF(G${r}>0,I${r}/G${r},"")`},
+        pcob:{formula:`IF(E${r}>0,F${r}/E${r},"")`},
+        pend:{formula:`E${r}-F${r}`},
+        brecha:{formula:`IF(OR(K${r}="",L${r}=""),"",L${r}-K${r})`},
+        sem:{formula:`IF(G${r}>0,IF(I${r}>G${r},"ROJO",IF(I${r}/G${r}>=0.8,"AMARILLO","VERDE")),"VERDE")`}
+      });
+    });
+    const u=lista.length+1,t=u+1;
+    const tot=wp.addRow({po:'TOTAL',con:{formula:`SUM(E2:E${u})`},cob:{formula:`SUM(F2:F${u})`},ppto:{formula:`SUM(G2:G${u})`},
+      comp:{formula:`SUM(H2:H${u})`},real:{formula:`SUM(I2:I${u})`},disp:{formula:`SUM(J2:J${u})`},
+      fin:{formula:`IF(G${t}>0,I${t}/G${t},"")`},pcob:{formula:`IF(E${t}>0,F${t}/E${t},"")`},pend:{formula:`SUM(N2:N${u})`}});
+    tot.font={bold:true};tot.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEEF2F6'}};
+    [['ROJO','FFFDECEC','FFC53030'],['AMARILLO','FFFFF7DF','FFB7791F'],['VERDE','FFE9F7EF','FF16803A']].forEach(([txt,bg,fg])=>
+      wp.addConditionalFormatting({ref:`P2:P${u}`,rules:[{type:'containsText',operator:'containsText',text:txt,
+        style:{fill:{type:'pattern',pattern:'solid',bgColor:{argb:bg}},font:{color:{argb:fg},bold:true}}}]}));
+
+    // ---------- Hoja Rubros ----------
+    const wr=wb.addWorksheet('Rubros');
+    hojaEncabezado(wr,[
+      {header:'PO',key:'po',width:10},{header:'Rubro clave',key:'clave',width:28},{header:'Rubro',key:'rubro',width:34},
+      {header:'Presupuesto inicial',key:'ini',width:16,style:{numFmt:M}},{header:'Presupuesto aterrizado',key:'ppto',width:16,style:{numFmt:M}},
+      {header:'Comprometido',key:'comp',width:15,style:{numFmt:M}},{header:'Real (suma detalle)',key:'real',width:15,style:{numFmt:M}},
+      {header:'Disponible',key:'disp',width:15,style:{numFmt:M}},{header:'% real/ppto.',key:'pct',width:11,style:{numFmt:P}},
+      {header:'Control',key:'ctrl',width:15},{header:'Real tabla resumen',key:'rt',width:15,style:{numFmt:M}},
+      {header:'Diferencia',key:'dif',width:13,style:{numFmt:M}}
+    ]);
+    rubrosXls.forEach((x,i)=>{const r=i+2;
+      wr.addRow({po:x.proyecto,clave:x.clave,rubro:x.rubro||x.clave,ini:x.ini,ppto:x.ppto,comp:x.comp,
+        real:{formula:`SUMIFS('Detalle real'!$I:$I,'Detalle real'!$A:$A,$A${r},'Detalle real'!$B:$B,$B${r})`},
+        disp:{formula:`E${r}-G${r}`},
+        pct:{formula:`IF(E${r}>0,G${r}/E${r},"")`},
+        ctrl:{formula:`IF(AND(E${r}=0,G${r}>0),"Sin presupuesto",IF(E${r}=0,"",IF(G${r}>E${r},"Excedido",IF(G${r}/E${r}>=0.8,"Atención","Normal"))))`},
+        rt:x.realTabla,
+        dif:{formula:`ROUND(G${r}-K${r},2)`}
+      });
+    });
+
+    // ---------- Hoja Detalle real ----------
+    const wd=wb.addWorksheet('Detalle real');
+    hojaEncabezado(wd,[
+      {header:'PO',key:'po',width:10},{header:'Rubro clave',key:'clave',width:28},{header:'Rubro',key:'rubro',width:30},
+      {header:'Fecha',key:'fecha',width:12,style:{numFmt:'dd/mm/yyyy'}},{header:'Proveedor / origen',key:'prov',width:34},
+      {header:'Documento',key:'doc',width:20},{header:'Descripción',key:'desc',width:45},{header:'Cuenta contable',key:'cta',width:34},
+      {header:'Valor',key:'monto',width:14,style:{numFmt:M}}
+    ]);
+    det.forEach(x=>wd.addRow({po:String(x.proyecto),clave:x.rubro_clave,rubro:x.rubro,
+      fecha:x.fecha?new Date(String(x.fecha).slice(0,10)+'T00:00:00Z'):null,prov:x.proveedor,doc:x.factura,desc:x.descripcion,
+      cta:x.cuenta_contable,monto:num(x.monto)}));
+
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download='Control_Operaciones_'+new Date().toISOString().slice(0,10)+'.xlsx';a.click();URL.revokeObjectURL(url);
+  }catch(e){alert('Error generando Excel: '+e.message);console.error(e)}
+  finally{showLoading(false)}
+}
+$('excelBtn').addEventListener('click',exportarExcel);
 boot();
 </script>
 </body>
